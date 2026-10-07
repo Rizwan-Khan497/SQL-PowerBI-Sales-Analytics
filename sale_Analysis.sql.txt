@@ -1,0 +1,158 @@
+-- =====================================================
+-- E-commerce Sales & Customer Analytics Script
+-- Database: sales_order | Table: customer_sales
+-- Tools: MySQL Workbench, Power BI Desktop
+-- Description: Complete analytical workflow from data 
+--              exploration to RFM segmentation.
+-- =====================================================
+
+USE sales_order;
+
+-- -----------------------------------------------------
+-- SECTION 1: DATA EXPLORATION & OVERVIEW
+-- -----------------------------------------------------
+
+-- View complete raw dataset
+SELECT * 
+FROM customer_sales;
+
+-- Total number of orders executed
+SELECT COUNT(order_id) AS total_orders 
+FROM customer_sales;
+
+-- Total unique active customers
+SELECT COUNT(DISTINCT customer_id) AS total_customers 
+FROM customer_sales;
+
+
+-- -----------------------------------------------------
+-- SECTION 2: CUSTOMER AGGREGATION & FILTERING
+-- -----------------------------------------------------
+
+-- Total orders and spending broken down by customer
+SELECT 
+    customer_id, 
+    COUNT(order_id) AS total_order,
+    SUM(order_amount) AS total_amount 
+FROM customer_sales
+GROUP BY customer_id 
+ORDER BY total_order DESC, total_amount DESC;
+
+-- Identify highest-spending customer
+SELECT 
+    customer_id, 
+    COUNT(order_id) AS total_order,
+    SUM(order_amount) AS total_amount 
+FROM customer_sales
+GROUP BY customer_id 
+ORDER BY total_amount DESC
+LIMIT 1;
+
+-- Order timeline for specific customer (Customer 102)
+SELECT order_id, order_amount, order_date 
+FROM customer_sales
+WHERE customer_id = 102
+ORDER BY order_date ASC;
+
+-- Filtering for specific target customers (101, 102, 123)
+SELECT customer_id, order_id, order_amount, order_date 
+FROM customer_sales
+WHERE customer_id IN (101, 102, 123)
+ORDER BY customer_id DESC, order_date ASC;
+
+-- Range filtering for customer IDs (101 to 110)
+SELECT customer_id, order_id, order_amount, order_date 
+FROM customer_sales
+WHERE customer_id BETWEEN 101 AND 110
+ORDER BY customer_id ASC, order_date ASC;
+
+-- Filtering repeat customers (Orders > 1)
+SELECT 
+    customer_id, 
+    COUNT(order_id) AS total_orders, 
+    SUM(order_amount) AS total_amount 
+FROM customer_sales
+GROUP BY customer_id
+HAVING COUNT(order_id) > 1
+ORDER BY total_orders ASC;
+
+
+-- -----------------------------------------------------
+-- SECTION 3: BUSINESS LOGIC & TIME-SERIES TRENDS
+-- -----------------------------------------------------
+
+-- High-Value vs. Low-Value order categorization
+SELECT 
+    customer_id, 
+    order_id, 
+    order_amount,
+    CASE
+        WHEN order_amount >= 500 THEN 'High Value'
+        ELSE 'Low Value'
+    END AS order_category
+FROM customer_sales
+ORDER BY order_amount DESC;
+
+-- Monthly sales volume and revenue trend
+SELECT 
+    DATE_FORMAT(order_date, '%Y-%m') AS sale_month,
+    COUNT(order_id) AS total_orders,
+    SUM(order_amount) AS monthly_revenue
+FROM customer_sales
+GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+ORDER BY sale_month ASC;
+
+-- Count of High Value vs Low Value orders per customer
+SELECT 
+    customer_id,
+    CASE 
+        WHEN order_amount >= 500 THEN 'High Value'
+        ELSE 'Low Value'
+    END AS order_category,
+    COUNT(order_id) AS total_orders,
+    SUM(order_amount) AS total_amount
+FROM customer_sales
+GROUP BY customer_id, 
+         CASE 
+             WHEN order_amount >= 500 THEN 'High Value'
+             ELSE 'Low Value'
+         END
+ORDER BY customer_id;
+
+
+-- -----------------------------------------------------
+-- SECTION 4: ADVANCED WINDOW FUNCTIONS & RFM ANALYSIS
+-- -----------------------------------------------------
+
+-- Sequential order numbering per customer
+SELECT 
+    customer_id,
+    order_id,
+    order_amount,
+    order_date,
+    ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date ASC) AS order_sequence
+FROM customer_sales;
+
+-- Cumulative spending per customer over time
+SELECT 
+    customer_id,
+    order_id,
+    order_amount,
+    order_date,
+    SUM(order_amount) OVER (PARTITION BY customer_id ORDER BY order_date ASC) AS cumulative
+FROM customer_sales;
+
+-- Recency, Frequency, & Monetary (RFM) customer segmentation
+SELECT 
+    customer_id,
+    DATEDIFF('2026-10-01', MAX(order_date)) AS recency_days,
+    COUNT(order_id) AS frequency,
+    SUM(order_amount) AS monetary_value,
+    CASE 
+        WHEN COUNT(order_id) >= 4 AND SUM(order_amount) >= 1000 THEN 'VIP Customer'
+        WHEN COUNT(order_id) >= 2 THEN 'Loyal Customer'
+        ELSE 'Regular Customer'
+    END AS customer_segment
+FROM customer_sales
+GROUP BY customer_id
+ORDER BY monetary_value DESC;
